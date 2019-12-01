@@ -2,7 +2,7 @@
 #include "../lib/dora.h"
 
 //wait() 函数的缺陷是因为, wait()本身阻塞, 但是由于异常信号不会缓存, 所以可能遗漏对某些子进程资源的释放
-void sig_chld(int signo)
+void sig_chld1(int signo)
 {
     printf("who in\n");
     pid_t pid;
