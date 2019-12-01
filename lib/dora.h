@@ -12,12 +12,15 @@
 #include <signal.h>     //信号
 
 #include <fcntl.h> //文件流
+#include <math.h>
 
-#include <strings.h>
+#include <strings.h>    
 #include <string.h>
 
 #include <errno.h>
 #include <error.h>
+
+#include <sys/select.h> //IO复用
 
 #ifndef MAX_CHAR_LEN
 #define MAX_CHAR_LEN 1024
@@ -27,7 +30,28 @@
 #error S_IFSOCK not defined
 #endif
 
+#ifndef FD_SETSIZE
+#define FD_SETSIZE 256
+#endif
+
 typedef void Sigfunc(int);
+
+//程序终止函数
+void err_sys(const char * buffer) 
+{
+    printf("sys_error: `%s` errno:`%d`, error:`%s`\n", buffer, errno, error);
+    exit(1);
+}
+
+void sys_quit(const char *buffer)
+{
+    printf("sys_stop: `%s` \n", buffer);
+    exit(0);
+}
+
+int max(int a, int b) {
+    return a >= b ? a : b;
+}
 
 //判断描述字是否为套接口描述字
 int isfdtype(int fd, int fdtype)
@@ -47,14 +71,12 @@ int isfdtype(int fd, int fdtype)
     }
 }
 
-//read包装函数
 ssize_t Read(int fd, void *vptr, size_t nbytes)
 {
     int nread;
 begin:
     if ((nread = read(fd, vptr, nbytes)) < 0)
     {
-        //当读操作(阻塞)被中断时的处理
         if (errno == EINTR)
         {
             goto begin;
@@ -64,24 +86,18 @@ begin:
             return -1;
         }
     }
-    else if (nread == 0)
-    {
-        //读取到EOF
-        return 0;
-    }
-    //读取字符末尾追加`\0`字符
     vptr += nread;
     vptr = 0;
     return nread;
 }
 
-//字节流操作
+    //字节流操作
 ssize_t readn(int fd, void *vptr, size_t nbytes)
 {
-    ssize_t nleft;  //目前待读取长度
-    ssize_t nread;  //一次read读取的长度
-    char *buffer;   //指向buffer指针
-    buffer = (char *)vptr; 
+    ssize_t nleft;
+    ssize_t nread;
+    char *buffer;
+    buffer = (char *)vptr;
     nleft = nbytes;
     while (nleft > 0)
     {
@@ -98,11 +114,13 @@ ssize_t readn(int fd, void *vptr, size_t nbytes)
         }
         else if (nread == 0)
         {
+            printf("base-read:`%s`\n", buffer);
             break; //EOF
         }
         nleft -= nread;
-        buffer += nread;    //指针地址向后移动
+        buffer += nread;
     }
+    printf("bytes:`%d`, pos:`%d`\n", nbytes, nleft);
     return nbytes - nleft;
 }
 
@@ -163,7 +181,6 @@ ssize_t buffered_read(int fd, char *chr)
     return 1;
 }
 
-//读取指定长度字符串中的一行数据`以\n结尾`
 ssize_t readline(int fd, void *vptr, size_t nbytes)
 {
     int rc;    //my_read()返回值
@@ -205,28 +222,41 @@ ssize_t readline(int fd, void *vptr, size_t nbytes)
     return i;
 }
 
-//返回的是一个`void (*)(int)`类型的函数指针
-Sigfunc *signal(int signo, Sigfunc *func)
-{
+//进程信号异步通知处理函数
+Sigfunc * signal(int signo, Sigfunc * func)
+{   
     struct sigaction act, oact;
     act.sa_handler = func;
     sigemptyset(&act.sa_mask);
     act.sa_flags = 0;
-    if (SIGALRM == signo)
-    {
+    if(SIGALRM == signo) {
 #ifdef SA_INTERRUPT
         act.sa_flags |= SA_INTERRUPT;
 #endif
-    }
-    else
-    {
+    } else {
 #ifdef SA_RESTART
         act.sa_flags |= SA_RESTART;
 #endif
     }
-    if (sigaction(signo, &act, &oact) < 0)
-    {
+    if(sigaction(signo, &act, &oact) < 0) {
         return SIG_ERR;
     }
     return oact.sa_handler;
+}
+
+int Select(int maxfd, fd_set * readset, fd_set * writeset, fd_set * exceptset, struct timeval * timeout)
+{
+
+    if(select(maxfd, readset, writeset, exceptset, timeout) < 0) {
+        err_sys("[select] 发生错误");
+    }
+    return 1;
+}
+
+int Shutdown(int fd, int howto)
+{
+    if(0 > shutdown(fd, howto)) {
+        printf("shutdown fail! errno:`%d`, error:`%s`\n", errno, error);
+    }
+    return 0;
 }
