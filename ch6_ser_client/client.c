@@ -7,31 +7,29 @@ int contract(int cfd, int ifd)
     char buffer[MAX_CHAR_LEN];
     char recv[MAX_CHAR_LEN];
     //首先读取
-    while (1)
+
+    bzero(&buffer, 0);
+    bzero(&recv, 0);
+    if ((rcnt = Read(ifd, buffer, MAX_CHAR_LEN)) >= 0)
     {
-        bzero(&buffer, 0);
-        bzero(&recv, 0);
-        if ((rcnt = Read(ifd, buffer, MAX_CHAR_LEN)) >= 0)
+        if (0 == rcnt)
         {
-            if (0 == rcnt)
-            {
-                printf("input line end!\n");
-                return; //结束符
-            }
-            printf("len:`%d`, cli-input:%s", strlen(buffer), buffer);
-            writen(cfd, buffer, strlen(buffer));
-            if (0 == (rcnt = Read(cfd, recv, MAX_CHAR_LEN)))
-            { //FIN
-                printf("server send FIN\n");
-                return;
-            }
-            printf("server-ret: read:%s", recv);
+            printf("input line end!\n");
+            return; //结束符
         }
-        else
-        {
-            printf("read failed!\n");
+        printf("len:`%d`, cli-input:%s", strlen(buffer), buffer);
+        writen(cfd, buffer, strlen(buffer));
+        if (0 == (rcnt = Read(cfd, recv, MAX_CHAR_LEN)))
+        { //FIN
+            printf("server send FIN\n");
             return;
         }
+        printf("server-ret: read:%s", recv);
+    }
+    else
+    {
+        printf("read failed!\n");
+        return;
     }
 }
 
